@@ -16,6 +16,14 @@ const pool = databaseUrl ? new Pool({
 let memoryState = null;
 const sessions = new Map();
 
+const defaultPasswords = {
+  admin: 'admin',
+  ana: '123',
+  carla: '123',
+  bea: '123',
+  diego: '123'
+};
+
 function createInitialState() {
   return {
     funcionarios: [
@@ -41,6 +49,23 @@ function createInitialState() {
     ],
     nextId: 13,
     historicoDesafios: []
+  };
+}
+
+function normalizeStoredState(data) {
+  if (!data) return createInitialState();
+  const base = createInitialState();
+  const funcionarios = Array.isArray(data.funcionarios) ? data.funcionarios : base.funcionarios;
+  return {
+    ...base,
+    ...data,
+    funcionarios: funcionarios.map(funcionario => ({
+      ...funcionario,
+      senha: funcionario.senha || defaultPasswords[funcionario.login] || ''
+    })),
+    perguntas: Array.isArray(data.perguntas) ? data.perguntas : base.perguntas,
+    nextId: Number(data.nextId) || base.nextId,
+    historicoDesafios: Array.isArray(data.historicoDesafios) ? data.historicoDesafios : []
   };
 }
 
@@ -100,9 +125,11 @@ async function initializeDatabase() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
-  if (!await readState()) {
-    await writeState(createInitialState());
-    console.log('Estado inicial da Escola de Crock criado no banco.');
+  const storedState = await readState();
+  const normalizedState = normalizeStoredState(storedState);
+  if (JSON.stringify(storedState) !== JSON.stringify(normalizedState)) {
+    await writeState(normalizedState);
+    console.log(storedState ? 'Estado da Escola de Crock normalizado no banco.' : 'Estado inicial da Escola de Crock criado no banco.');
   }
 }
 
