@@ -1028,7 +1028,8 @@ const state = {
     { id:11, autor:'Beatriz Lima', empresa:'LC Odontologia', pergunta:'Consulta de urgência tem valor diferente?',    resposta:'Sim, consultas de urgência têm uma taxa adicional. Ligue para saber o valor atual.',          nota:0, status:'aguardando' },
     { id:12, autor:'Diego Ramos',  empresa:'Biodents',       pergunta:'Tratamento de canal é demorado?',              resposta:'Depende da complexidade. Pode ser feito em 1 a 3 sessões. O dentista avalia no raio-X.',       nota:0, status:'aguardando' },
   ],
-  nextId: 13
+  nextId: 13,
+  historicoDesafios: []
 };
 
 let persistQueue = Promise.resolve();
@@ -1037,7 +1038,8 @@ function estadoPersistivel() {
   return {
     funcionarios: state.funcionarios,
     perguntas: state.perguntas,
-    nextId: state.nextId
+    nextId: state.nextId,
+    historicoDesafios: state.historicoDesafios
   };
 }
 
@@ -1050,6 +1052,7 @@ async function carregarEstadoServidor() {
       state.funcionarios = payload.data.funcionarios || state.funcionarios;
       state.perguntas = payload.data.perguntas || state.perguntas;
       state.nextId = Number(payload.data.nextId) || state.nextId;
+      state.historicoDesafios = Array.isArray(payload.data.historicoDesafios) ? payload.data.historicoDesafios : [];
     } else {
       await salvarEstadoServidor();
     }
@@ -1150,6 +1153,29 @@ function updateSecStats() {
   atualizarLiderDestaques();
 }
 
+function normalizarTextoDesafio(texto) {
+  return String(texto || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function desafioJaUsado(texto) {
+  const normalizado = normalizarTextoDesafio(texto);
+  return normalizado && Array.isArray(state.historicoDesafios) && state.historicoDesafios.includes(normalizado);
+}
+
+function registrarDesafioUsado(texto) {
+  const normalizado = normalizarTextoDesafio(texto);
+  if (!normalizado) return;
+  const historico = Array.isArray(state.historicoDesafios) ? state.historicoDesafios : [];
+  state.historicoDesafios = [normalizado, ...historico.filter(item => item !== normalizado)].slice(0, 80);
+  salvarEstadoServidor();
+}
+
 window.gerarDesafioJacare = async function gerarDesafioJacare() {
   const btn = document.getElementById('desafio-jacare-btn');
   const log = document.getElementById('desafio-log');
@@ -1169,10 +1195,28 @@ window.gerarDesafioJacare = async function gerarDesafioJacare() {
         'Preciso terminar meu tratamento antes de uma viagem importante. Vocês podem garantir o prazo e explicar o que acontece se houver atraso?',
         'Já tive uma experiência ruim com outro dentista e quero saber quais garantias vocês oferecem se o resultado do tratamento não ficar como foi planejado?'
       ];
-      pergunta.value = desafios[Math.floor(Math.random() * desafios.length)];
+      const extras = [
+        'Tenho medo de fechar o tratamento e depois descobrir custos extras. Vocês conseguem me explicar todos os valores antes de eu decidir?',
+        'Se eu começar o tratamento aqui e precisar mudar de cidade, como fica a continuidade do atendimento e o que eu já paguei?',
+        'Minha agenda é muito apertada e não posso faltar ao trabalho. Vocês conseguem organizar o tratamento em horários bem específicos?',
+        'Eu vi reclamações na internet sobre tratamentos parecidos. O que vocês fazem para evitar esse tipo de problema com os pacientes?',
+        'Quero fazer o procedimento, mas preciso comparar materiais e marcas usados. Vocês informam esses detalhes antes do orçamento final?',
+        'Se o convênio negar autorização depois da consulta, vocês ajudam a resolver ou eu preciso falar sozinho com o plano?'
+      ];
+      const opcoesDesafio = [...desafios, ...extras];
+      const disponiveis = opcoesDesafio.filter(item => !desafioJaUsado(item));
+      if (!disponiveis.length) state.historicoDesafios = [];
+      const base = disponiveis.length ? disponiveis : opcoesDesafio;
+      pergunta.value = base[Math.floor(Math.random() * base.length)];
       log.textContent = 'Desafio gerado em modo demonstração.';
     } else {
+      const historicoRecente = (state.historicoDesafios || [])
+        .slice(0, 20)
+        .map((item, index) => `${index + 1}. ${item}`)
+        .join('\n');
       const prompt = [
+        'Crie uma situação nova, variando o assunto, o contexto do paciente e o tipo de objeção.',
+        historicoRecente ? `Evite repetir ou parecer muito semelhante a estas perguntas recentes:\n${historicoRecente}` : '',
         'Crie UMA única pergunta em português do Brasil feita por um paciente exigente para a secretária de uma clínica odontológica.',
         'A pergunta deve ser difícil, concreta, realista e respeitosa, podendo abordar preço, prazo, garantia, convênio, urgência ou resultado do tratamento.',
         'Não forneça resposta, explicação, título, lista, aspas ou formatação. Retorne somente a pergunta do paciente, com no máximo duas frases.'
@@ -1191,6 +1235,7 @@ window.gerarDesafioJacare = async function gerarDesafioJacare() {
     }
 
     resposta.value = '';
+    registrarDesafioUsado(pergunta.value);
     pergunta.focus();
     showToast('Desafio do Jacaré criado! 🐊');
   } catch (e) {

@@ -16,6 +16,34 @@ const pool = databaseUrl ? new Pool({
 let memoryState = null;
 const sessions = new Map();
 
+function createInitialState() {
+  return {
+    funcionarios: [
+      { id: 1, nome: 'Ana Silva', login: 'ana', senha: '123', empresa: 'Biodents', funcao: 'Secretária', ativo: true },
+      { id: 2, nome: 'Carla Mendes', login: 'carla', senha: '123', empresa: 'Master Odonto', funcao: 'Secretária', ativo: true },
+      { id: 3, nome: 'Beatriz Lima', login: 'bea', senha: '123', empresa: 'LC Odontologia', funcao: 'Secretária', ativo: true },
+      { id: 4, nome: 'Diego Ramos', login: 'diego', senha: '123', empresa: 'Biodents', funcao: 'Secretária', ativo: false },
+      { id: 99, nome: 'Admin', login: 'admin', senha: 'admin', empresa: 'LC Odontologia', funcao: 'Administrador', ativo: true }
+    ],
+    perguntas: [
+      { id: 1, autor: 'Ana Silva', empresa: 'Biodents', pergunta: 'Qual o preço para extrair siso?', resposta: 'Depende da situação do siso. Precisamos de uma consulta para confirmar.', nota: 4, status: 'analisado' },
+      { id: 2, autor: 'Ana Silva', empresa: 'Biodents', pergunta: 'Quanto tempo dura um aparelho fixo?', resposta: 'Em média de 1 a 3 anos, dependendo de cada caso. O dentista avalia na consulta.', nota: 5, status: 'analisado' },
+      { id: 3, autor: 'Ana Silva', empresa: 'Biodents', pergunta: 'A clínica atende plano Hapvida?', resposta: 'Sim! Atendemos Hapvida. Pode agendar pelo WhatsApp.', nota: 5, status: 'analisado' },
+      { id: 4, autor: 'Carla Mendes', empresa: 'Master Odonto', pergunta: 'Clareamento dental machuca?', resposta: 'Em alguns casos pode causar sensibilidade temporária. O dentista vai orientar na consulta.', nota: 5, status: 'analisado' },
+      { id: 5, autor: 'Carla Mendes', empresa: 'Master Odonto', pergunta: 'Quanto custa uma lente de contato dental?', resposta: 'O valor varia por caso. Agendamos uma avaliação gratuita para orçamento.', nota: 3, status: 'analisado' },
+      { id: 6, autor: 'Beatriz Lima', empresa: 'LC Odontologia', pergunta: 'Atende criança com plano?', resposta: 'Sim, atendemos crianças. Verifique quais planos são aceitos com nossa secretaria.', nota: 4, status: 'analisado' },
+      { id: 7, autor: 'Ana Silva', empresa: 'Biodents', pergunta: 'Tem estacionamento na clínica?', resposta: 'Temos vagas conveniadas no estacionamento ao lado. Informe que vai para a clínica.', nota: 2, status: 'analisado' },
+      { id: 8, autor: 'Ana Silva', empresa: 'Biodents', pergunta: 'Preciso de encaminhamento para consulta?', resposta: 'Não precisa de encaminhamento. Pode agendar diretamente pelo WhatsApp.', nota: 5, status: 'analisado' },
+      { id: 9, autor: 'Carla Mendes', empresa: 'Master Odonto', pergunta: 'Fazem implante dentário?', resposta: 'Sim! Trabalhamos com implantes. Agende uma avaliação para saber mais.', nota: 0, status: 'aguardando' },
+      { id: 10, autor: 'Beatriz Lima', empresa: 'LC Odontologia', pergunta: 'Qual o horário de atendimento?', resposta: 'Atendemos de segunda a sexta das 8h às 18h e sábados das 8h às 12h.', nota: 0, status: 'aguardando' },
+      { id: 11, autor: 'Beatriz Lima', empresa: 'LC Odontologia', pergunta: 'Consulta de urgência tem valor diferente?', resposta: 'Sim, consultas de urgência têm uma taxa adicional. Ligue para saber o valor atual.', nota: 0, status: 'aguardando' },
+      { id: 12, autor: 'Diego Ramos', empresa: 'Biodents', pergunta: 'Tratamento de canal é demorado?', resposta: 'Depende da complexidade. Pode ser feito em 1 a 3 sessões. O dentista avalia no raio-X.', nota: 0, status: 'aguardando' }
+    ],
+    nextId: 13,
+    historicoDesafios: []
+  };
+}
+
 app.disable('x-powered-by');
 app.use(express.json({ limit: '2mb' }));
 app.use(express.static(__dirname));
@@ -62,6 +90,7 @@ function publicState(data) {
 async function initializeDatabase() {
   if (!pool) {
     console.warn('DATABASE_URL ausente: usando memoria temporaria no ambiente local.');
+    if (!memoryState) memoryState = createInitialState();
     return;
   }
   await pool.query(`
@@ -71,6 +100,10 @@ async function initializeDatabase() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+  if (!await readState()) {
+    await writeState(createInitialState());
+    console.log('Estado inicial da Escola de Crock criado no banco.');
+  }
 }
 
 app.get('/api/health', (_req, res) => {
@@ -128,7 +161,8 @@ app.put('/api/state', requireSession, async (req, res) => {
         senha: item.senha || currentById.get(Number(item.id))?.senha || ''
       })),
       perguntas: data.perguntas,
-      nextId: Number(data.nextId) || 1
+      nextId: Number(data.nextId) || 1,
+      historicoDesafios: Array.isArray(data.historicoDesafios) ? data.historicoDesafios.slice(0, 80) : []
     };
     await writeState(cleanState);
     res.json({ ok: true });
