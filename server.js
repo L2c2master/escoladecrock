@@ -55,13 +55,20 @@ function createInitialState() {
 function normalizeStoredState(data) {
   if (!data) return createInitialState();
   const base = createInitialState();
-  const funcionarios = Array.isArray(data.funcionarios) ? data.funcionarios : base.funcionarios;
+  const storedFuncionarios = Array.isArray(data.funcionarios) ? data.funcionarios : [];
+  const funcionariosByLogin = new Map(storedFuncionarios.map(funcionario => [funcionario.login, funcionario]));
+  base.funcionarios.forEach(defaultFuncionario => {
+    if (!funcionariosByLogin.has(defaultFuncionario.login)) {
+      funcionariosByLogin.set(defaultFuncionario.login, defaultFuncionario);
+    }
+  });
   return {
     ...base,
     ...data,
-    funcionarios: funcionarios.map(funcionario => ({
+    funcionarios: [...funcionariosByLogin.values()].map(funcionario => ({
       ...funcionario,
-      senha: funcionario.senha || defaultPasswords[funcionario.login] || ''
+      senha: funcionario.senha || defaultPasswords[funcionario.login] || '',
+      ativo: funcionario.login === 'admin' ? true : funcionario.ativo
     })),
     perguntas: Array.isArray(data.perguntas) ? data.perguntas : base.perguntas,
     nextId: Number(data.nextId) || base.nextId,
